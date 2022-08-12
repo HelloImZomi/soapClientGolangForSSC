@@ -3,7 +3,9 @@ package gosoap
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -48,10 +50,9 @@ type Client struct {
 
 // Call call's the method m with Params p
 func (c *Client) Call(m string, e string, p Params) (err error) {
-	c.Method = e
 	c.EnvelopeTitle = m
+	c.Method = e
 	c.Params = p
-	//c.payload, err = xml.MarshalIndent(c, "", "")
 	c.payload, err = xml.Marshal(c)
 	c.Method = m
 	if err != nil {
@@ -62,52 +63,54 @@ func (c *Client) Call(m string, e string, p Params) (err error) {
 	if err != nil {
 		return err
 	}
-	//sss := string(b)
-	//fmt.Println(sss)
-	
 
 	var soap SoapEnvelope
-	err = xml.Unmarshal(b, &soap)
+
+	if err := xml.Unmarshal(b, &soap); err != nil {
+		return fmt.Errorf("an error occurred decoding the body: %s", err)
+	}
 
 	c.Body = soap.Body.Contents
 
-	
 	return err
 }
 
 // Unmarshal get the body and unmarshal into the interface
-func (c *Client) GetResponse() string {
+func (c *Client) GetResponse() (string, error) {
 	if len(c.Body) == 0 {
-		return fmt.Sprintf("Body is empty")
+		return "", errors.New("body is empty")
 	}
-	sss := string(c.Body)
-	indexInicio := strings.Index(sss, "<response>")
 
-	indexFinal := strings.Index(sss, "</response>")
-	sss = sss[indexInicio+10:indexFinal]
+	sss := string(c.Body)
+	SPAuth := &SecurityProviderAuthenticate{}
+	if err := xml.Unmarshal([]byte(sss), &SPAuth); err != nil {
+		return "", fmt.Errorf("an error occurred decoding the body: %s", err)
+	}
+	// Extract the response
+	sss = SPAuth.Response
 	if c.Method == "Execute" {
 		if strings.Contains(sss, `status="fail"`) {
-			return "error"
+			return "", errors.New("the operation could not be performed")
 		} else {
-			indexInicio = strings.Index(sss, "&lt;JournalNumber&gt;")
-			indexFinal = strings.Index(sss, "&lt;/JournalNumber&gt;")
-			sss = sss[indexInicio+21:indexFinal]
+			sss = strings.TrimLeft(strings.TrimRight(sss, "&lt;/JournalNumber&gt;"), "&lt;JournalNumber&gt;")
 		}
 	}
 
-
-
-	return sss
-
-	
+	return sss, nil
 }
+
 func (c *Client) Unmarshal(v interface{}) error {
 	if len(c.Body) == 0 {
-		return fmt.Errorf("Body is empty")
+		return fmt.Errorf("body is empty")
 	}
 
 	var f Fault
-	xml.Unmarshal(c.Body, &f)
+
+	err := xml.Unmarshal(c.Body, &f)
+	if err != nil {
+		return fmt.Errorf("an error occurred decoding the body: %s", err)
+	}
+
 	if f.Code != "" {
 		return fmt.Errorf("[%s]: %s", f.Code, f.Description)
 	}
@@ -140,7 +143,9 @@ func (c *Client) doRequest() ([]byte, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	return ioutil.ReadAll(resp.Body)
 }
@@ -155,4 +160,9 @@ type SoapEnvelope struct {
 type SoapBody struct {
 	XMLName  struct{} `xml:"Body"`
 	Contents []byte   `xml:",innerxml"`
+}
+
+// SecurityProviderAuthenticate struct
+type SecurityProviderAuthenticate struct {
+	Response string `xml:"response"`
 }
