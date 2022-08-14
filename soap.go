@@ -28,7 +28,7 @@ func SoapClient(wsdl string, urlSoap string) (*Client, error) {
 	}
 	c := &Client{
 		WSDL:        wsdl,
-		URL:         urlSoap,  //strings.TrimSuffix(d.TargetNamespace, "/"),
+		URL:         urlSoap, //strings.TrimSuffix(d.TargetNamespace, "/"),
 		Definitions: d,
 	}
 
@@ -38,14 +38,14 @@ func SoapClient(wsdl string, urlSoap string) (*Client, error) {
 // Client struct hold all the informations about WSDL,
 // request and response of the server
 type Client struct {
-	WSDL        	string
-	URL         	string
-	Method      	string
-	EnvelopeTitle   string
-	Params      	Params
-	Definitions 	*wsdlDefinitions
-	Body        	[]byte
-	payload 		[]byte
+	WSDL          string
+	URL           string
+	Method        string
+	EnvelopeTitle string
+	Params        Params
+	Definitions   *wsdlDefinitions
+	Body          []byte
+	payload       []byte
 }
 
 // Call call's the method m with Params p
@@ -90,7 +90,7 @@ func (c *Client) GetResponse() (string, error) {
 	sss = SPAuth.Response
 	if c.Method == "Execute" {
 		if strings.Contains(sss, `status="fail"`) {
-			return "", errors.New("the operation could not be performed")
+			return "", fmt.Errorf("the operation could not be performed: %s", sss)
 		} else {
 			sss = strings.TrimLeft(strings.TrimRight(sss, "&lt;/JournalNumber&gt;"), "&lt;JournalNumber&gt;")
 		}
@@ -121,10 +121,6 @@ func (c *Client) Unmarshal(v interface{}) error {
 // doRequest makes new request to the server using the c.Method, c.URL and the body.
 // body is enveloped in Call method
 func (c *Client) doRequest() ([]byte, error) {
-	//c.payload = []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?><SOAP-ENV:Envelope xmlns:SOAP-ENV=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ns1=\"http://systemsunion.com/connect/webservices/\"><SOAP-ENV:Body><ns1:SecurityProviderAuthenticateRequest><ns1:name>AOK</ns1:name><ns1:password></ns1:password></ns1:SecurityProviderAuthenticateRequest></SOAP-ENV:Body></SOAP-ENV:Envelope>")
-
-//sss := string(c.payload)
-//fmt.Println(sss)
 	req, err := http.NewRequest("POST", c.URL, bytes.NewBuffer(c.payload))
 	if err != nil {
 		return nil, err
